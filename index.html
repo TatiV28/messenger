@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Messenger App</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/babel-standalone@6.26.0/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.5.1/dist/socket.io.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const socket = io('http://localhost:3000');
+
+    function App() {
+      const [username, setUsername] = React.useState('');
+      const [message, setMessage] = React.useState('');
+      const [selectedContact, setSelectedContact] = React.useState(null);
+      const [messages, setMessages] = React.useState([]);
+      const [contacts, setContacts] = React.useState([]);
+      const [isLoggedIn, setIsLoggedIn] = React.useState(false);
+
+      React.useEffect(() => {
+        socket.on('message', (msg) => {
+          setMessages((prev) => [...prev, msg]);
+        });
+        socket.on('users', (users) => {
+          setContacts(users.filter(u => u.username !== username));
+        });
+        return () => {
+          socket.off('message');
+          socket.off('users');
+        };
+      }, [username]);
+
+      const handleLogin = (e) => {
+        e.preventDefault();
+        if (username.trim()) {
+          socket.emit('login', username);
+          setIsLoggedIn(true);
+        }
+      };
+
+      const sendMessage = (e) => {
+        e.preventDefault();
+        if (message.trim() && selectedContact) {
+          const msg = { from: username, to: selectedContact.username, text: message, time: new Date().toLocaleTimeString() };
+          socket.emit('message', msg);
+          setMessages((prev) => [...prev, msg]);
+          setMessage('');
+        }
+      };
+
+      if (!isLoggedIn) {
+        return (
+          <div className="flex items-center justify-center h-screen bg-gray-100">
+            <div className="p-6 bg-white rounded shadow-md">
+              <h2 className="text-2xl mb-4">Login</h2>
+              <form onSubmit={handleLogin}>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Enter username"
+                  className="w-full p-2 mb-4 border rounded"
+                />
+                <button type="submit" className="w-full p-2 bg-green-500 text-white rounded">Login</button>
+              </form>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="flex h-screen bg-gray-100">
+          <div className="w-1/4 bg-white border-r">
+            <h2 className="p-4 text-xl font-bold">Contacts</h2>
+            {contacts.map((contact) => (
+              <div
+                key={contact.id}
+                onClick={() => setSelectedContact(contact)}
+                className={`p-4 cursor-pointer ${selectedContact?.id === contact.id ? 'bg-gray-200' : ''}`}
+              >
+                {contact.username}
+              </div>
+            ))}
+          </div>
+          <div className="w-3/4 flex flex-col">
+            {selectedContact ? (
+              <>
+                <h2 className="p-4 text-xl font-bold border-b">{selectedContact.username}</h2>
+                <div className="flex-1 p-4 overflow-y-auto">
+                  {messages
+                    .filter((msg) => (msg.from === username && msg.to === selectedContact.username) || (msg.from === selectedContact.username && msg.to === username))
+                    .map((msg, index) => (
+                      <div
+                        key={index}
+                        className={`mb-2 ${msg.from === username ? 'text-right' : 'text-left'}`}
+                      >
+                        <span className={`inline-block p-2 rounded ${msg.from === username ? 'bg-green-200' : 'bg-gray-200'}`}>
+                          {msg.text} <span className="text-xs text-gray-500">{msg.time}</span>
+                        </span>
+                      </div>
+                    ))}
+                </div>
+                <form onSubmit={sendMessage} className="p-4 border-t flex">
+                  <input
+                    type="text"
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    placeholder="Type a message"
+                    className="flex-1 p-2 border rounded-l"
+                  />
+                  <button type="submit" className="p-2 bg-green-500 text-white rounded-r">Send</button>
+                </form>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <p>Select a contact to start chatting</p>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
